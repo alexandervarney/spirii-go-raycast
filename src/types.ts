@@ -66,8 +66,10 @@ export type Evse = {
   status: string;
   type: string;
   price: {
-    elements: PriceElement[];
-    isSpotPriceBased: boolean;
-    type: string;
+    elements?: PriceElement[];
+    isSpotPriceBased?: boolean;
+    type?: string;
+    perKwh?: number;
+    currency?: string;
   };
 };

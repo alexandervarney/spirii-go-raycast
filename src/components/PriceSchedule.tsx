@@ -24,15 +24,33 @@ export default function PriceSchedule({ evseId }: Props) {
   const { priceGranularity } = getPreferenceValues<{ priceGranularity?: "hour" | "15min" }>();
   const granularity: "hour" | "15min" = priceGranularity ?? "hour";
 
-  const { currentEl, upcoming, currentPrice } = useMemo(() => {
-    if (!data?.price?.elements) return { currentEl: null, upcoming: [], currentPrice: null };
-    const els = data.price.elements;
+  const { currentEl, upcoming, currentPrice, isFixed } = useMemo(() => {
+    const empty = { currentEl: null, upcoming: [], currentPrice: null, isFixed: false };
+    if (!data?.price) return empty;
+    const els = data.price.elements ?? [];
     const now = new Date();
     const current = els.find((e) => !isFallback(e) && isCurrent(e, now)) ?? null;
     const futureEls = els.filter((e) => !isFallback(e) && isUpcoming(e, now));
     const future = granularity === "hour" ? groupByHour(futureEls) : toRawBuckets(futureEls);
-    const curPrice = current ? (current.price_components[0]?.price ?? null) : null;
-    return { currentEl: current, upcoming: future, currentPrice: curPrice };
+    const hasSchedule = current !== null || futureEls.length > 0;
+    if (current) {
+      return {
+        currentEl: current,
+        upcoming: future,
+        currentPrice: current.price_components[0]?.price ?? null,
+        isFixed: false,
+      };
+    }
+    if (!hasSchedule && typeof data.price.perKwh === "number") {
+      return { currentEl: null, upcoming: [], currentPrice: data.price.perKwh, isFixed: true };
+    }
+    const fallback = !hasSchedule ? (els.find(isFallback) ?? null) : null;
+    return {
+      currentEl: fallback,
+      upcoming: future,
+      currentPrice: fallback?.price_components[0]?.price ?? null,
+      isFixed: !hasSchedule && fallback !== null,
+    };
   }, [data, granularity]);
 
   if (error) {
@@ -56,7 +74,7 @@ export default function PriceSchedule({ evseId }: Props) {
   const topCheapest = [...upcoming].sort((a, b) => a.price - b.price).slice(0, 3);
 
   const nowTitle = currentPrice !== null ? `${currentPrice.toFixed(2)} DKK/kWh` : "Price unavailable";
-  const nowSubtitle = currentEl ? formatTimeWindow(currentEl) : "";
+  const nowSubtitle = isFixed ? "Fixed price" : currentEl ? formatTimeWindow(currentEl) : "";
 
   return (
     <List isLoading={isLoading} navigationTitle={evseId} searchBarPlaceholder="Filter time windows…">

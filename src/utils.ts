@@ -92,7 +92,9 @@ export function isUpcoming(el: PriceElement, now: Date = new Date()): boolean {
 }
 
 export function isFallback(el: PriceElement): boolean {
-  return !el.restrictions;
+  const r = el.restrictions;
+  if (!r) return true;
+  return !r.start_time && !r.end_time && !r.start_date && !r.end_date;
 }
 
 export type PriceTier = "cheap" | "mid" | "expensive";
