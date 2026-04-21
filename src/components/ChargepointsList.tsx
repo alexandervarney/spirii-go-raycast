@@ -1,4 +1,10 @@
-import { Action, ActionPanel, Icon, List } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Icon,
+  List,
+  openExtensionPreferences,
+} from "@raycast/api";
 import { showFailureToast, useFetch } from "@raycast/utils";
 import { useEffect } from "react";
 import { locationDetailUrl } from "../api";
@@ -88,6 +94,11 @@ export default function ChargepointsList({ location }: Props) {
                 icon={Icon.RotateClockwise}
                 onAction={() => revalidate()}
                 shortcut={{ modifiers: ["cmd"], key: "r" }}
+              />
+              <Action
+                title="Open Extension Preferences"
+                icon={Icon.Gear}
+                onAction={openExtensionPreferences}
               />
             </ActionPanel>
           }

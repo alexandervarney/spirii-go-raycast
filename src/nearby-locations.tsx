@@ -57,7 +57,8 @@ export default function Command() {
   }, [locations, coords]);
 
   useEffect(() => {
-    if (listError) showFailureToast(listError, { title: "Could not load chargers" });
+    if (listError)
+      showFailureToast(listError, { title: "Could not load chargers" });
   }, [listError]);
 
   const retry = () => {
@@ -127,7 +128,7 @@ export default function Command() {
     <List isLoading={isLoading} searchBarPlaceholder="Search chargers…">
       {sorted.length === 0 && !isLoading ? (
         <List.EmptyView
-          icon={Icon.MagnifyingGlass}
+          icon={Icon.Plug}
           title="No nearby chargers"
           description="No Spirii Go locations found near your current position."
           actions={
@@ -213,4 +214,3 @@ export default function Command() {
     </List>
   );
 }
-

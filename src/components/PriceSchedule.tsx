@@ -279,11 +279,11 @@ type HourBucket = {
 function toRawBuckets(els: PriceElement[]): HourBucket[] {
   return els
     .map((el) => {
-      const r = el.restrictions;
+      const r = el.restrictions!;
       return {
-        date: r?.start_date ?? "",
-        startTime: r?.start_time ?? "",
-        endTime: r?.end_time ?? "",
+        date: r.start_date!,
+        startTime: r.start_time!,
+        endTime: r.end_time ?? "",
         price: el.price_components[0]?.price ?? 0,
       };
     })
@@ -298,9 +298,8 @@ function groupByHour(els: PriceElement[]): HourBucket[] {
     { date: string; hour: number; sum: number; count: number }
   >();
   for (const el of els) {
-    const r = el.restrictions;
-    if (!r?.start_date || !r?.start_time) continue;
-    const hour = parseInt(r.start_time.slice(0, 2), 10);
+    const r = el.restrictions!;
+    const hour = parseInt(r.start_time!.slice(0, 2), 10);
     if (!Number.isFinite(hour)) continue;
     const key = `${r.start_date}T${String(hour).padStart(2, "0")}`;
     const price = el.price_components[0]?.price ?? 0;
@@ -309,7 +308,7 @@ function groupByHour(els: PriceElement[]): HourBucket[] {
       existing.sum += price;
       existing.count += 1;
     } else {
-      buckets.set(key, { date: r.start_date, hour, sum: price, count: 1 });
+      buckets.set(key, { date: r.start_date!, hour, sum: price, count: 1 });
     }
   }
   return Array.from(buckets.entries())

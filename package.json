@@ -31,7 +31,7 @@
     {
       "name": "lat",
       "title": "Latitude Override",
-      "description": "Optional. If set with Longitude, overrides IP-based geolocation.",
+      "description": "Optional. If set with Longitude, used instead of GPS.",
       "type": "textfield",
       "required": false,
       "placeholder": "55.6761"
@@ -39,7 +39,7 @@
     {
       "name": "lon",
       "title": "Longitude Override",
-      "description": "Optional. If set with Latitude, overrides IP-based geolocation.",
+      "description": "Optional. If set with Latitude, used instead of GPS.",
       "type": "textfield",
       "required": false,
       "placeholder": "12.5683"

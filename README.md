@@ -41,4 +41,4 @@ If neither is configured, the extension will prompt you — it won't fall back t
 
 ## Data source
 
-Uses the public `app.spirii.dk` API. Unaffiliated with Spirii.
+This is an unofficial, community-built extension. It is not affiliated with, endorsed by, or supported by Spirii. Data comes from the public `app.spirii.dk` endpoints used by their web/mobile apps, which may change or stop working at any time.
