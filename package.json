@@ -14,7 +14,7 @@
       "description": "Used by the \"My Chargepoint\" command for quick lookup.",
       "type": "textfield",
       "required": false,
-      "placeholder": "DK.SPI.Z165227*1"
+      "placeholder": "DK.SPI.Z000000*1"
     },
     {
       "name": "priceGranularity",
