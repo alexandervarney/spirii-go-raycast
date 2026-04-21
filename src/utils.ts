@@ -1,21 +1,35 @@
 import { Color } from "@raycast/api";
 import { PriceElement } from "./types";
 
-export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversine(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 export function formatConnector(type: string): string {
   const map: Record<string, string> = {
-    sType2: "Type 2",
     sType1: "Type 1",
+    sType2: "Type 2",
+    sType3: "Type 3",
     sCCS: "CCS",
+    cCCS1: "CCS1",
+    cCCS2: "CCS2",
     sCHAdeMO: "CHAdeMO",
+    cCHAdeMO: "CHAdeMO",
+    sTesla: "Tesla",
+    sSchuko: "Schuko",
+    sDomestic: "Domestic",
   };
   return map[type] ?? type;
 }
@@ -44,8 +58,8 @@ export function statusText(status: string): string {
   return status;
 }
 
-export function formatDkk(price: number): string {
-  return `${price.toFixed(2)} DKK/kWh`;
+export function formatPrice(price: number, currency = "DKK"): string {
+  return `${price.toFixed(2)} ${currency}/kWh`;
 }
 
 export function formatTimeWindow(el: PriceElement): string {
@@ -75,7 +89,11 @@ export function prettyDate(dateStr: string, now: Date = new Date()): string {
   if (dateStr === tomorrow) return "Tomorrow";
   const d = new Date(`${dateStr}T00:00:00`);
   if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function toYmd(d: Date): string {
@@ -98,6 +116,9 @@ export function isUpcoming(el: PriceElement, now: Date = new Date()): boolean {
   return start > now;
 }
 
+// A price element is a fallback (no scheduled window) when it has no time/date
+// bounds. An element with only non-temporal restrictions (e.g. day_of_week) is
+// also treated as a fallback here — Spirii tariffs don't use those today.
 export function isFallback(el: PriceElement): boolean {
   const r = el.restrictions;
   if (!r) return true;
@@ -106,13 +127,14 @@ export function isFallback(el: PriceElement): boolean {
 
 export type PriceTier = "cheap" | "mid" | "expensive";
 
-export function tierForPrices(
-  prices: number[],
-): (price: number) => PriceTier {
-  if (prices.length === 0) return () => "mid";
+export function tierForPrices(prices: number[]): (price: number) => PriceTier {
+  // With too few samples, quartiles collapse and every item ends up at an extreme.
+  // Treat those as "mid" so we don't mislead the user with false cheap/expensive tags.
+  if (prices.length < 6) return () => "mid";
   const sorted = [...prices].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  if (q1 === q3) return () => "mid";
   return (price: number) => {
     if (price <= q1) return "cheap";
     if (price >= q3) return "expensive";

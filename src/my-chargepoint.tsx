@@ -1,4 +1,11 @@
-import { Action, ActionPanel, Detail, getPreferenceValues, Icon, openExtensionPreferences } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Detail,
+  getPreferenceValues,
+  Icon,
+  openExtensionPreferences,
+} from "@raycast/api";
 import PriceSchedule from "./components/PriceSchedule";
 
 export default function Command() {
@@ -11,7 +18,11 @@ export default function Command() {
         markdown={`# No chargepoint saved\n\nSet your Chargepoint ID in extension preferences to use this command.`}
         actions={
           <ActionPanel>
-            <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
+            <Action
+              title="Open Extension Preferences"
+              icon={Icon.Gear}
+              onAction={openExtensionPreferences}
+            />
           </ActionPanel>
         }
       />

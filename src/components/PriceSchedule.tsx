@@ -1,10 +1,16 @@
-import { Action, ActionPanel, getPreferenceValues, Icon, List } from "@raycast/api";
-import { useFetch } from "@raycast/utils";
-import { useMemo } from "react";
+import {
+  Action,
+  ActionPanel,
+  getPreferenceValues,
+  Icon,
+  List,
+} from "@raycast/api";
+import { showFailureToast, useFetch } from "@raycast/utils";
+import { useEffect, useMemo, useState } from "react";
 import { evseUrl } from "../api";
 import { Evse, PriceElement } from "../types";
 import {
-  formatDkk,
+  formatPrice,
   formatTimeWindow,
   prettyDate,
   isCurrent,
@@ -19,19 +25,41 @@ import {
 type Props = { evseId: string; statusOverride?: string };
 
 export default function PriceSchedule({ evseId, statusOverride }: Props) {
-  const { data, isLoading, error, revalidate } = useFetch<Evse>(evseUrl(evseId), { keepPreviousData: true });
+  const { data, isLoading, error, revalidate } = useFetch<Evse>(
+    evseUrl(evseId),
+    { keepPreviousData: true },
+  );
 
-  const { priceGranularity } = getPreferenceValues<{ priceGranularity?: "hour" | "15min" }>();
+  const { priceGranularity } = getPreferenceValues<{
+    priceGranularity?: "hour" | "15min";
+  }>();
   const granularity: "hour" | "15min" = priceGranularity ?? "hour";
 
+  // Tick once a minute so the "Now" / "Upcoming" split advances with the clock.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (error) showFailureToast(error, { title: "Could not load chargepoint" });
+  }, [error]);
+
   const { currentEl, upcoming, currentPrice, isFixed } = useMemo(() => {
-    const empty = { currentEl: null, upcoming: [], currentPrice: null, isFixed: false };
+    const empty = {
+      currentEl: null,
+      upcoming: [],
+      currentPrice: null,
+      isFixed: false,
+    };
     if (!data?.price) return empty;
     const els = data.price.elements ?? [];
-    const now = new Date();
-    const current = els.find((e) => !isFallback(e) && isCurrent(e, now)) ?? null;
+    const current =
+      els.find((e) => !isFallback(e) && isCurrent(e, now)) ?? null;
     const futureEls = els.filter((e) => !isFallback(e) && isUpcoming(e, now));
-    const future = granularity === "hour" ? groupByHour(futureEls) : toRawBuckets(futureEls);
+    const future =
+      granularity === "hour" ? groupByHour(futureEls) : toRawBuckets(futureEls);
     const hasSchedule = current !== null || futureEls.length > 0;
     if (current) {
       return {
@@ -42,7 +70,12 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
       };
     }
     if (!hasSchedule && typeof data.price.perKwh === "number") {
-      return { currentEl: null, upcoming: [], currentPrice: data.price.perKwh, isFixed: true };
+      return {
+        currentEl: null,
+        upcoming: [],
+        currentPrice: data.price.perKwh,
+        isFixed: true,
+      };
     }
     const fallback = !hasSchedule ? (els.find(isFallback) ?? null) : null;
     return {
@@ -51,9 +84,9 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
       currentPrice: fallback?.price_components[0]?.price ?? null,
       isFixed: !hasSchedule && fallback !== null,
     };
-  }, [data, granularity]);
+  }, [data, granularity, now]);
 
-  if (error) {
+  if (error && !data) {
     return (
       <List navigationTitle={evseId}>
         <List.EmptyView
@@ -62,7 +95,11 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
           description={error.message}
           actions={
             <ActionPanel>
-              <Action title="Retry" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
+              <Action
+                title="Retry"
+                icon={Icon.RotateClockwise}
+                onAction={() => revalidate()}
+              />
             </ActionPanel>
           }
         />
@@ -71,29 +108,53 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
   }
 
   const tier = tierForPrices(upcoming.map((u) => u.price));
-  const topCheapest = [...upcoming].sort((a, b) => a.price - b.price).slice(0, 3);
+  const topCheapest = [...upcoming]
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 3);
 
-  const nowTitle = currentPrice !== null ? `${currentPrice.toFixed(2)} DKK/kWh` : "Price unavailable";
-  const nowSubtitle = isFixed ? "Fixed price" : currentEl ? formatTimeWindow(currentEl) : "";
+  const currency = data?.price?.currency ?? "DKK";
+  const nowTitle =
+    currentPrice !== null
+      ? formatPrice(currentPrice, currency)
+      : "Price unavailable";
+  const nowSubtitle = isFixed
+    ? "Fixed price"
+    : currentEl
+      ? formatTimeWindow(currentEl)
+      : "";
+  // Spirii's per-evse endpoint ignores OutOfService; if the caller passed a
+  // richer status from the parent listing and the evse endpoint claims the
+  // chargepoint is otherwise fine, prefer the override.
+  const status = pickStatus(data?.status, statusOverride);
 
   return (
-    <List isLoading={isLoading} navigationTitle={evseId} searchBarPlaceholder="Filter time windows…">
-      {data && (() => {
-        const status = statusOverride ?? data.status;
-        return (
+    <List
+      isLoading={isLoading}
+      navigationTitle={evseId}
+      searchBarPlaceholder="Search prices…"
+    >
+      {data && (
         <List.Section title="Now">
           <List.Item
             icon={{ source: Icon.Bolt, tintColor: statusColor(status) }}
             title={nowTitle}
             subtitle={nowSubtitle}
             accessories={[
-              { tag: { value: statusText(status), color: statusColor(status) } },
+              {
+                tag: { value: statusText(status), color: statusColor(status) },
+              },
             ]}
             actions={
               <ActionPanel>
-                <Action.CopyToClipboard title="Copy Chargepoint ID" content={data.evseId} />
+                <Action.CopyToClipboard
+                  title="Copy Chargepoint ID"
+                  content={data.evseId}
+                />
                 {currentPrice !== null && (
-                  <Action.CopyToClipboard title="Copy Current Price" content={formatDkk(currentPrice)} />
+                  <Action.CopyToClipboard
+                    title="Copy Current Price"
+                    content={formatPrice(currentPrice, currency)}
+                  />
                 )}
                 <Action
                   title="Refresh"
@@ -105,8 +166,7 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
             }
           />
         </List.Section>
-        );
-      })()}
+      )}
       {topCheapest.length > 0 && (
         <List.Section title="Cheapest">
           {topCheapest.map((hour, i) => {
@@ -117,10 +177,20 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
                 icon={{ source: Icon.Star, tintColor: tierColor(t) }}
                 title={`${hour.startTime} – ${hour.endTime}`}
                 subtitle={prettyDate(hour.date)}
-                accessories={[{ tag: { value: formatDkk(hour.price), color: tierColor(t) } }]}
+                accessories={[
+                  {
+                    tag: {
+                      value: formatPrice(hour.price, currency),
+                      color: tierColor(t),
+                    },
+                  },
+                ]}
                 actions={
                   <ActionPanel>
-                    <Action.CopyToClipboard title="Copy Price" content={formatDkk(hour.price)} />
+                    <Action.CopyToClipboard
+                      title="Copy Price"
+                      content={formatPrice(hour.price, currency)}
+                    />
                     <Action
                       title="Refresh"
                       icon={Icon.RotateClockwise}
@@ -143,10 +213,20 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
               icon={{ source: Icon.Clock, tintColor: tierColor(t) }}
               title={`${hour.startTime} – ${hour.endTime}`}
               subtitle={prettyDate(hour.date)}
-              accessories={[{ tag: { value: formatDkk(hour.price), color: tierColor(t) } }]}
+              accessories={[
+                {
+                  tag: {
+                    value: formatPrice(hour.price, currency),
+                    color: tierColor(t),
+                  },
+                },
+              ]}
               actions={
                 <ActionPanel>
-                  <Action.CopyToClipboard title="Copy Price" content={formatDkk(hour.price)} />
+                  <Action.CopyToClipboard
+                    title="Copy Price"
+                    content={formatPrice(hour.price, currency)}
+                  />
                   <Action
                     title="Refresh"
                     icon={Icon.RotateClockwise}
@@ -160,10 +240,33 @@ export default function PriceSchedule({ evseId, statusOverride }: Props) {
         })}
       </List.Section>
       {!isLoading && upcoming.length === 0 && !currentEl && (
-        <List.EmptyView icon={Icon.Info} title="No price data" description="This chargepoint has no pricing schedule." />
+        <List.EmptyView
+          icon={Icon.Info}
+          title="No price data"
+          description="This chargepoint has no pricing schedule."
+        />
       )}
     </List>
   );
+}
+
+function pickStatus(
+  fresh: string | undefined,
+  override: string | undefined,
+): string {
+  if (!fresh) return override ?? "";
+  if (!override) return fresh;
+  const o = override.toLowerCase();
+  // Only honor the override when it reports an abnormal state the evse endpoint masks.
+  if (
+    o === "outofservice" ||
+    o === "out_of_service" ||
+    o === "unknown" ||
+    o === "reserved"
+  ) {
+    return override;
+  }
+  return fresh;
 }
 
 type HourBucket = {
@@ -184,11 +287,16 @@ function toRawBuckets(els: PriceElement[]): HourBucket[] {
         price: el.price_components[0]?.price ?? 0,
       };
     })
-    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+    .sort((a, b) =>
+      `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`),
+    );
 }
 
 function groupByHour(els: PriceElement[]): HourBucket[] {
-  const buckets = new Map<string, { date: string; hour: number; sum: number; count: number }>();
+  const buckets = new Map<
+    string,
+    { date: string; hour: number; sum: number; count: number }
+  >();
   for (const el of els) {
     const r = el.restrictions;
     if (!r?.start_date || !r?.start_time) continue;
@@ -213,4 +321,3 @@ function groupByHour(els: PriceElement[]): HourBucket[] {
       price: v.sum / v.count,
     }));
 }
-

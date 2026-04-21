@@ -1,8 +1,15 @@
-import { Action, ActionPanel, Color, Icon, List, openExtensionPreferences, showToast, Toast } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  List,
+  openExtensionPreferences,
+} from "@raycast/api";
 import { useEffect, useMemo } from "react";
-import { useCachedPromise, useFetch } from "@raycast/utils";
+import { showFailureToast, useCachedPromise, useFetch } from "@raycast/utils";
 import { locationsUrl } from "./api";
-import { getCoords } from "./location";
+import { getCoords, LocationUnavailableError } from "./location";
 import { Location } from "./types";
 import { availabilityColor, haversine } from "./utils";
 import ChargepointsList from "./components/ChargepointsList";
@@ -33,33 +40,61 @@ export default function Command() {
     const own = locations.filter((l) => l.platform === "spirii");
     return [...own].sort((a, b) => {
       if (!coords) return 0;
-      const da = haversine(coords.lat, coords.lon, a.coordinates.latitude, a.coordinates.longitude);
-      const db = haversine(coords.lat, coords.lon, b.coordinates.latitude, b.coordinates.longitude);
+      const da = haversine(
+        coords.lat,
+        coords.lon,
+        a.coordinates.latitude,
+        a.coordinates.longitude,
+      );
+      const db = haversine(
+        coords.lat,
+        coords.lon,
+        b.coordinates.latitude,
+        b.coordinates.longitude,
+      );
       return da - db;
     });
   }, [locations, coords]);
 
   useEffect(() => {
-    if (coords?.warning) {
-      showToast({ style: Toast.Style.Failure, title: "Location fallback", message: coords.warning });
-    }
-  }, [coords?.warning]);
+    if (listError) showFailureToast(listError, { title: "Could not load chargers" });
+  }, [listError]);
 
   const retry = () => {
     revalidateCoords();
     if (url) revalidate();
   };
 
-  if (coordsError || listError) {
+  if (coordsError instanceof LocationUnavailableError) {
+    const notInstalled = coordsError.reason === "not_installed";
     return (
       <List>
         <List.EmptyView
-          icon={Icon.Warning}
-          title="Could not load chargers"
-          description={(coordsError || listError)?.message ?? "Network error"}
+          icon={Icon.Geopin}
+          title={notInstalled ? "Location not available" : "GPS unavailable"}
+          description={
+            notInstalled
+              ? "Install CoreLocationCLI (brew install corelocationcli) for GPS, or set a manual latitude/longitude in preferences."
+              : `${coordsError.message}\n\nTry again, or set a manual latitude/longitude in preferences.`
+          }
           actions={
             <ActionPanel>
-              <Action title="Retry" icon={Icon.RotateClockwise} onAction={retry} />
+              <Action
+                title="Open Extension Preferences"
+                icon={Icon.Gear}
+                onAction={openExtensionPreferences}
+              />
+              {notInstalled && (
+                <Action.OpenInBrowser
+                  title="View CoreLocationCLI on GitHub"
+                  url="https://github.com/fulldecent/corelocationcli"
+                />
+              )}
+              <Action
+                title="Retry"
+                icon={Icon.RotateClockwise}
+                onAction={retry}
+              />
             </ActionPanel>
           }
         />
@@ -67,36 +102,74 @@ export default function Command() {
     );
   }
 
-  const sourceLabel = coords ? sourceToLabel(coords.source) : "Locating…";
+  if (listError && sorted.length === 0 && !isLoading) {
+    return (
+      <List>
+        <List.EmptyView
+          icon={Icon.Warning}
+          title="Could not load chargers"
+          description={listError.message ?? "Network error"}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Retry"
+                icon={Icon.RotateClockwise}
+                onAction={retry}
+              />
+            </ActionPanel>
+          }
+        />
+      </List>
+    );
+  }
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder={`Filter by name, address, or city… (${sourceLabel})`}>
+    <List isLoading={isLoading} searchBarPlaceholder="Search chargers…">
       {sorted.length === 0 && !isLoading ? (
         <List.EmptyView
           icon={Icon.MagnifyingGlass}
           title="No nearby chargers"
-          description={`Using ${sourceLabel}. Install CoreLocationCLI for precise GPS or set a manual override in preferences.`}
+          description="No Spirii Go locations found near your current position."
           actions={
             <ActionPanel>
-              <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
+              <Action
+                title="Open Extension Preferences"
+                icon={Icon.Gear}
+                onAction={openExtensionPreferences}
+              />
             </ActionPanel>
           }
         />
       ) : (
         sorted.map((loc) => {
           const distanceKm = coords
-            ? haversine(coords.lat, coords.lon, loc.coordinates.latitude, loc.coordinates.longitude)
+            ? haversine(
+                coords.lat,
+                coords.lon,
+                loc.coordinates.latitude,
+                loc.coordinates.longitude,
+              )
             : null;
           return (
             <List.Item
               key={loc.id}
-              icon={{ source: Icon.Plug, tintColor: availabilityColor(loc.available, loc.evseCount) }}
+              icon={{
+                source: Icon.Plug,
+                tintColor: availabilityColor(loc.available, loc.evseCount),
+              }}
               title={loc.name}
               subtitle={`${loc.address}, ${loc.zipCode} ${loc.city}`}
               accessories={[
                 { tag: { value: `${loc.power.max} kW`, color: Color.Blue } },
                 ...(distanceKm !== null
-                  ? [{ text: distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km` }]
+                  ? [
+                      {
+                        text:
+                          distanceKm < 1
+                            ? `${Math.round(distanceKm * 1000)} m`
+                            : `${distanceKm.toFixed(1)} km`,
+                      },
+                    ]
                   : []),
                 {
                   tag: {
@@ -116,9 +189,21 @@ export default function Command() {
                     title="Open in Maps"
                     url={`https://maps.apple.com/?q=${encodeURIComponent(loc.name)}&ll=${loc.coordinates.latitude},${loc.coordinates.longitude}`}
                   />
-                  <Action.CopyToClipboard title="Copy Location ID" content={loc.id} />
-                  <Action title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} shortcut={{ modifiers: ["cmd"], key: "r" }} />
-                  <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
+                  <Action.CopyToClipboard
+                    title="Copy Location ID"
+                    content={loc.id}
+                  />
+                  <Action
+                    title="Refresh"
+                    icon={Icon.RotateClockwise}
+                    onAction={() => revalidate()}
+                    shortcut={{ modifiers: ["cmd"], key: "r" }}
+                  />
+                  <Action
+                    title="Open Extension Preferences"
+                    icon={Icon.Gear}
+                    onAction={openExtensionPreferences}
+                  />
                 </ActionPanel>
               }
             />
@@ -127,12 +212,5 @@ export default function Command() {
       )}
     </List>
   );
-}
-
-function sourceToLabel(source: string): string {
-  if (source === "corelocation") return "GPS";
-  if (source === "preference") return "manual override";
-  if (source === "ip") return "IP geolocation";
-  return "default: Copenhagen";
 }
 
