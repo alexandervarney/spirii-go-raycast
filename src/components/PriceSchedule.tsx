@@ -16,9 +16,9 @@ import {
   tierForPrices,
 } from "../utils";
 
-type Props = { evseId: string };
+type Props = { evseId: string; statusOverride?: string };
 
-export default function PriceSchedule({ evseId }: Props) {
+export default function PriceSchedule({ evseId, statusOverride }: Props) {
   const { data, isLoading, error, revalidate } = useFetch<Evse>(evseUrl(evseId), { keepPreviousData: true });
 
   const { priceGranularity } = getPreferenceValues<{ priceGranularity?: "hour" | "15min" }>();
@@ -78,14 +78,16 @@ export default function PriceSchedule({ evseId }: Props) {
 
   return (
     <List isLoading={isLoading} navigationTitle={evseId} searchBarPlaceholder="Filter time windows…">
-      {data && (
+      {data && (() => {
+        const status = statusOverride ?? data.status;
+        return (
         <List.Section title="Now">
           <List.Item
-            icon={{ source: Icon.Bolt, tintColor: statusColor(data.status) }}
+            icon={{ source: Icon.Bolt, tintColor: statusColor(status) }}
             title={nowTitle}
             subtitle={nowSubtitle}
             accessories={[
-              { tag: { value: statusText(data.status), color: statusColor(data.status) } },
+              { tag: { value: statusText(status), color: statusColor(status) } },
             ]}
             actions={
               <ActionPanel>
@@ -103,7 +105,8 @@ export default function PriceSchedule({ evseId }: Props) {
             }
           />
         </List.Section>
-      )}
+        );
+      })()}
       {topCheapest.length > 0 && (
         <List.Section title="Cheapest">
           {topCheapest.map((hour, i) => {

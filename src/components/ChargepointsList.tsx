@@ -53,7 +53,7 @@ export default function ChargepointsList({ location }: Props) {
               <Action.Push
                 title="View Price Schedule"
                 icon={Icon.BarChart}
-                target={<PriceSchedule evseId={evse.id} />}
+                target={<PriceSchedule evseId={evse.id} statusOverride={evse.status} />}
               />
               <Action.CopyToClipboard title="Copy Chargepoint ID" content={evse.id} />
               <Action title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} shortcut={{ modifiers: ["cmd"], key: "r" }} />

@@ -28,12 +28,19 @@ export function availabilityColor(available: number, total: number): Color {
 }
 
 export function statusColor(status: string): Color {
-  return status.toLowerCase() === "available" ? Color.Green : Color.Red;
+  const s = status.toLowerCase();
+  if (s === "available") return Color.Green;
+  if (s === "inuse" || s === "in_use") return Color.Orange;
+  return Color.Red;
 }
 
 export function statusText(status: string): string {
-  if (status.toLowerCase() === "available") return "Available";
-  if (status.toLowerCase() === "inuse" || status.toLowerCase() === "in_use") return "In Use";
+  const s = status.toLowerCase();
+  if (s === "available") return "Available";
+  if (s === "inuse" || s === "in_use") return "In Use";
+  if (s === "outofservice" || s === "out_of_service") return "Out of Service";
+  if (s === "unknown") return "Unknown";
+  if (s === "reserved") return "Reserved";
   return status;
 }
 
