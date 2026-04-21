@@ -87,7 +87,7 @@ export default function Command() {
               />
               {notInstalled && (
                 <Action.OpenInBrowser
-                  title="View CoreLocationCLI on GitHub"
+                  title="View Corelocationcli on GitHub"
                   url="https://github.com/fulldecent/corelocationcli"
                 />
               )}
